@@ -1,19 +1,18 @@
-import '../styles/globals.css';
-import BottomNavigation from '../components/BottomNavigation';
+import { Inter } from 'next/font/google';
+import './globals.css';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: '봉사활동 웹사이트',
-  description: '봉사활동 정보 제공, 신청, 모임 관리, 공지사항 등을 제공하는 웹사이트입니다.',
+  title: '오늘의 봉사',
+  description: '봉사활동 정보 제공, 봉사자 모집 및 관리, 봉사활동 일정 관리 시스템',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ko">
-      <body>
-        <div className="min-h-screen bg-gray-100 pb-20">
-          {children}
-          <BottomNavigation />
-        </div>
+    <html lang="es">
+      <body className={inter.className}>
+        {children}
       </body>
     </html>
   );

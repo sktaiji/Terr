@@ -1,112 +1,212 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format, parseISO, isBefore, isAfter, addDays, startOfDay } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { format, parseISO, isBefore, isAfter, startOfDay, addDays, addMonths, subMonths } from 'date-fns';
+import { es } from 'date-fns/locale';
 import Link from 'next/link';
+import Layout from './components/Layout';
 
-// 샘플 데이터 - 최근 공지사항 및 봉사 일정
-const notices = [
-  { id: 1, title: '6월 봉사활동 계획 안내', date: '2023-06-01', type: '공지' },
-  { id: 2, title: '신규 봉사자 교육 일정', date: '2023-06-05', type: '안내' },
-  { id: 3, title: '전시대 봉사 장소 변경 안내', date: '2023-06-08', type: '중요' },
-];
-
-const schedules = [
-  { id: 1, title: '중앙역 광장 전시대', date: '2023-06-10', participants: 2, max: 6 },
-  { id: 2, title: '시민 공원 봉사활동', date: '2023-06-15', participants: 3, max: 6 },
-  { id: 3, title: '북부 전시관 안내', date: '2023-06-20', participants: 1, max: 4 },
-];
-
-// 공지사항 카테고리 이모티콘
-const categoryEmojis = {
-  '회중': '🏛️',
-  '순회구': '🔄',
-  '기타': '📢'
+// 안전하게 날짜 처리하는 유틸리티 함수
+const safeFormatDate = (dateString, formatPattern = 'dd/MM/yyyy', locale = es) => {
+  if (!dateString) return '-';
+  
+  try {
+    // 유효한 날짜 문자열인지 확인
+    if (typeof dateString !== 'string') return '-';
+    
+    const date = parseISO(dateString);
+    if (isNaN(date.getTime())) {
+      return dateString; // 파싱할 수 없는 경우 원본 반환
+    }
+    
+    return format(date, formatPattern, { locale });
+  } catch (error) {
+    console.error('날짜 포맷 오류:', error);
+    return dateString; // 오류 발생 시 원본 반환
+  }
 };
 
-// 중요도 이모티콘
-const importanceLevelEmojis = {
-  'high': '🔼',
-  'medium': '⏺️',
-  'low': '🔽'
-};
-
-// 봉사 카테고리 정보
-const serviceCategories = [
-  { id: 'house', name: 'Por Casas', emoji: '🏠' },
-  { id: 'revisit', name: 'Revisitas/Estudios', emoji: '📚' },
-  { id: 'cart', name: 'Carrito', emoji: '🛒' },
-  { id: 'letter', name: 'Cartas/Llamadas', emoji: '✉️' }
-];
-
-// 카테고리 ID로 카테고리 정보 찾기
-const getCategoryById = (categoryId) => {
-  return serviceCategories.find(cat => cat.id === categoryId) || serviceCategories[0]; // 기본값은 호별
+// 안전하게 ISO 날짜 파싱
+const safeParseISO = (dateString) => {
+  if (!dateString || typeof dateString !== 'string') return null;
+  
+  try {
+    const date = parseISO(dateString);
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return date;
+  } catch (error) {
+    console.error('날짜 파싱 오류:', error);
+    return null;
+  }
 };
 
 // 공지사항 카드 컴포넌트
 const NoticeCard = ({ notice, onClick }) => {
   return (
     <div 
-      className="bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow"
+      className="bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition-shadow"
       onClick={onClick}
     >
-      <div className="flex items-center mb-2">
-        <span className="text-xl mr-2">{categoryEmojis[notice.category]}</span>
-        <h3 className="font-bold text-lg">{notice.title}</h3>
+      <div className="flex items-center mb-1">
+        <span className="text-lg mr-1.5">
+          {notice.category === 'congregación' ? '🏛️' : 
+           notice.category === 'Circuito' ? '🔄' : '📢'}
+        </span>
+        <h3 className="font-medium text-base truncate">{notice.title}</h3>
         {notice.importance === 'high' && (
-          <span className="ml-2 bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">Importante</span>
+          <span className="ml-1.5 bg-red-100 text-red-800 text-xs px-1.5 py-0.5 rounded-full">!</span>
         )}
       </div>
-      <p className="text-sm text-gray-500 mb-2">{notice.date} • {notice.category}</p>
-      <p className="text-gray-700 line-clamp-2">{notice.content}</p>
+      <p className="text-xs text-gray-500 mb-1">
+        {safeFormatDate(notice.date)}
+      </p>
+      <p className="text-sm text-gray-700 line-clamp-1">{notice.content}</p>
     </div>
   );
 };
 
 // 봉사 일정 카드 컴포넌트
 const ScheduleCard = ({ schedule, onClick }) => {
-  const date = parseISO(schedule.date);
-  const formattedDate = format(date, 'MM.dd (EEE)', { locale: ko });
-  const guidesCount = schedule.participants.length;
-  const category = getCategoryById(schedule.category);
+  const date = safeParseISO(schedule.date);
+  // 날짜가 유효하지 않은 경우 처리
+  if (!date) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition-shadow"
+        onClick={onClick}>
+        <div className="flex justify-between mb-1">
+          <h3 className="font-medium text-base truncate">{schedule.location || 'Localización desconocida'}</h3>
+        </div>
+        <div className="text-xs text-gray-600">Fecha no válida</div>
+      </div>
+    );
+  }
+  
+  const formattedDate = format(date, 'dd/MM/yyyy (EEE)', { locale: es });
+  const guidesCount = schedule.participants ? schedule.participants.length : 0;
+  
+  // 봉사 카테고리 정보
+  const serviceCategories = [
+    { id: 'house', name: 'Casas', emoji: '🏠' },
+    { id: 'revisit', name: 'Revisitas/Estudios', emoji: '📚' },
+    { id: 'cart', name: 'Carrito', emoji: '🛒' },
+    { id: 'letter', name: 'Cartas/Llamadas', emoji: '✉️' }
+  ];
+  
+  const category = serviceCategories.find(cat => cat.id === schedule.category) || serviceCategories[0];
   
   return (
     <div 
-      className="bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow"
+      className="bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition-shadow"
       onClick={onClick}
     >
-      <div className="flex justify-between mb-2">
+      <div className="flex justify-between mb-1">
         <div className="flex items-center">
-          <span className="text-xl mr-2">{category.emoji}</span>
-          <h3 className="font-bold">{schedule.location}</h3>
+          <span className="text-lg mr-1.5">{category.emoji}</span>
+          <h3 className="font-medium text-base truncate">{schedule.location}</h3>
         </div>
-        <span className="text-sm font-medium text-blue-600">
-          {guidesCount}/{schedule.maxParticipants} personas
+        <span className="text-xs font-medium text-blue-600">
+          {guidesCount}/{schedule.maxParticipants}
         </span>
       </div>
-      <div className="flex items-center justify-between text-sm text-gray-600">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between text-xs text-gray-600">
+        <div className="flex items-center space-x-1">
           <span>{formattedDate}</span>
           <span>•</span>
           <span>{schedule.time}</span>
         </div>
-        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{category.name}</span>
+        <span className="bg-blue-50 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{category.name}</span>
+      </div>
+      {schedule.territoryAddress && (
+        <div className="mt-2 text-xs">
+          <a 
+            href={`https://maps.google.com/?q=${encodeURIComponent(schedule.territoryAddress)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline flex items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            {schedule.territoryNumber ? `Territorio ${schedule.territoryNumber}` : 'Ver ubicación'}
+          </a>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 요일별 봉사 컴포넌트
+const WeeklyServiceCard = ({ day, services }) => {
+  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  
+  return (
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className={`py-1.5 px-3 ${day === 0 || day === 6 ? 'bg-sky-500' : 'bg-gradient-to-r from-sky-400 to-indigo-400'} text-white`}>
+        <h3 className="font-medium text-sm">{dayNames[day]}</h3>
+      </div>
+      <div className="p-2">
+        {services.length > 0 ? (
+          <div className="space-y-1.5">
+            {services.map((service, idx) => (
+              <div key={idx} className="flex items-center text-xs">
+                <span className="text-base mr-1.5">
+                  {service.category === 'house' ? '🏠' : 
+                   service.category === 'revisit' ? '📚' : 
+                   service.category === 'cart' ? '🛒' : '✉️'}
+                </span>
+                <div>
+                  <p className="font-medium leading-tight">{service.location}</p>
+                  <p className="text-gray-500 text-xs leading-tight">{service.time} • {service.captain || 'Sin capitán'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 py-1">No hay servicios</p>
+        )}
       </div>
     </div>
   );
 };
 
-// 공지사항 모달 컴포넌트
-const NoticeModal = ({ notice, onClose }) => {
+// 회관 청소 컴포넌트
+const CleaningGroupCard = ({ group }) => {
+  if (!group) return null;
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-lg shadow-sm p-3">
+      <div className="flex items-center mb-1.5">
+        <span className="text-lg mr-1.5">🧹</span>
+        <h3 className="font-medium text-base">Limpieza de Salón</h3>
+      </div>
+      <div className="bg-sky-50 p-2 rounded-lg">
+        <p className="text-xs font-medium mb-1">Grupo {group.number}</p>
+        <p className="text-xs text-gray-600">Responsable: {group.supervisor}</p>
+        <p className="text-xs text-gray-600">
+          {safeFormatDate(group.startDate)} - 
+          {safeFormatDate(group.endDate)}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// 공지사항 상세보기 모달
+const NoticeDetailModal = ({ notice, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-5">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center">
-              <span className="text-2xl mr-2">{categoryEmojis[notice.category]}</span>
+              <span className="text-2xl mr-2">
+                {notice.category === 'congregación' ? '🏛️' : 
+                 notice.category === 'Circuito' ? '🔄' : '📢'}
+              </span>
               <h2 className="text-xl font-bold">{notice.title}</h2>
               {notice.importance === 'high' && (
                 <span className="ml-2 bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">Importante</span>
@@ -121,7 +221,11 @@ const NoticeModal = ({ notice, onClose }) => {
               </svg>
             </button>
           </div>
-          <p className="text-sm text-gray-500 mb-4">{notice.date} • {notice.category}</p>
+          
+          <p className="text-sm text-gray-500 mb-4">
+            {safeFormatDate(notice.date)} • {notice.category}
+          </p>
+          
           <div className="border-t border-gray-100 pt-4">
             <p className="text-gray-700 whitespace-pre-line">{notice.content}</p>
           </div>
@@ -131,34 +235,34 @@ const NoticeModal = ({ notice, onClose }) => {
   );
 };
 
-// 봉사 일정 모달 컴포넌트
-const ScheduleModal = ({ schedule, onClose, onApply }) => {
-  const [name, setName] = useState('');
-  const date = parseISO(schedule.date);
-  const formattedDate = format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
-  const guidesCount = schedule.participants.length;
-  const isFull = guidesCount >= schedule.maxParticipants;
-  const category = getCategoryById(schedule.category);
+// 봉사 일정 상세보기 모달
+const ScheduleModal = ({ schedule, onClose }) => {
+  const date = safeParseISO(schedule.date);
+  // 날짜가 유효하지 않은 경우 기본값 사용
+  const formattedDate = date 
+    ? format(date, 'dd/MM/yyyy (EEE)', { locale: es })
+    : 'Fecha no disponible';
   
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (name.trim() && !isFull) {
-      onApply(name.trim());
-      setName('');
-    }
-  };
+  const guidesCount = schedule.participants ? schedule.participants.length : 0;
+  const serviceCategories = [
+    { id: 'house', name: 'Casas', emoji: '🏠' },
+    { id: 'revisit', name: 'Revisitas/Estudios', emoji: '📚' },
+    { id: 'cart', name: 'Carrito', emoji: '🛒' },
+    { id: 'letter', name: 'Cartas/Llamadas', emoji: '✉️' }
+  ];
+  const category = serviceCategories.find(cat => cat.id === schedule.category) || serviceCategories[0];
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-5">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center flex-wrap">
               <span className="text-2xl mr-2">{category.emoji}</span>
               <h2 className="text-xl font-bold">{schedule.location}</h2>
-              <span className="ml-2 bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{category.name}</span>
+              <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{category.name}</span>
               {schedule.isRecurring && (
-                <span className="ml-2 mt-1 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Recurrente Semanal</span>
+                <span className="ml-2 mt-1 bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">Recurrente Semanal</span>
               )}
             </div>
             <button 
@@ -173,64 +277,57 @@ const ScheduleModal = ({ schedule, onClose, onApply }) => {
           
           <div className="mb-4">
             <div className="flex items-center mb-2">
-              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-5 h-5 text-sky-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <p className="text-gray-700">{formattedDate}</p>
             </div>
             <div className="flex items-center mb-2">
-              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-5 h-5 text-sky-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p className="text-gray-700">{schedule.time}</p>
             </div>
             <div className="flex items-center mb-2">
-              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-5 h-5 text-sky-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               <p className="text-gray-700">Guías: {guidesCount}/{schedule.maxParticipants} personas</p>
             </div>
-          </div>
-          
-          <div className="border-t border-gray-100 pt-4 mb-4">
-            <h3 className="font-medium mb-2">Lista de Guías</h3>
-            {schedule.participants.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {schedule.participants.map((participant, index) => (
-                  <span 
-                    key={index}
-                    className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs"
-                  >
-                    {participant}
-                  </span>
-                ))}
+            {schedule.captain && (
+              <div className="flex items-center mb-2">
+                <svg className="w-5 h-5 text-sky-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <p className="text-gray-700">Capitán: {schedule.captain}</p>
               </div>
-            ) : (
-              <p className="text-sm text-gray-500">No hay guías registrados.</p>
+            )}
+            {schedule.territoryAddress && (
+              <div className="mb-2">
+                <a 
+                  href={`https://maps.google.com/?q=${encodeURIComponent(schedule.territoryAddress)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline flex items-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Ver ubicación en Google Maps
+                </a>
+              </div>
             )}
           </div>
           
-          {!isFull && (
-            <div className="border-t border-gray-100 pt-4">
-              <h3 className="font-medium mb-2">Solicitud de Servicio</h3>
-              <form onSubmit={handleSubmit} className="flex space-x-2">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ingrese su nombre"
-                  className="flex-grow p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Solicitar
-                </button>
-              </form>
-            </div>
-          )}
+          {/* 날짜 안전하게 포맷팅하여 링크 생성 */}
+          <Link
+            href={`/service?date=${date ? format(date, 'yyyy-MM-dd') : ''}`}
+            className="block w-full py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors text-center text-sm font-medium"
+          >
+            Ver más detalles y solicitar
+          </Link>
         </div>
       </div>
     </div>
@@ -240,122 +337,169 @@ const ScheduleModal = ({ schedule, onClose, onApply }) => {
 export default function HomePage() {
   const [notices, setNotices] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [weeklySchedules, setWeeklySchedules] = useState(Array(7).fill([]));
+  const [cleaningGroup, setCleaningGroup] = useState(null);
   const [selectedNotice, setSelectedNotice] = useState(null);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [territories, setTerritories] = useState([]);
+  const [publishers, setPublishers] = useState([]);
   
   // 로컬 스토리지에서 데이터 불러오기
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // 공지사항 불러오기
       const savedNotices = JSON.parse(localStorage.getItem('notices') || '[]');
-      setNotices(savedNotices);
+      // 최신순으로 정렬
+      const sortedNotices = savedNotices.sort((a, b) => {
+        // 날짜 안전하게 비교
+        const dateA = safeParseISO(a.date);
+        const dateB = safeParseISO(b.date);
+        if (!dateA || !dateB) return 0;
+        return dateB.getTime() - dateA.getTime();
+      }).slice(0, 4); // 최근 4개만 표시
+      setNotices(sortedNotices);
       
       // 봉사 일정 불러오기
       const savedSchedules = JSON.parse(localStorage.getItem('schedules') || '[]');
-      setSchedules(savedSchedules);
+      
+      // 날짜 기준으로 필터링 및 정렬
+      const today = startOfDay(new Date());
+      const upcomingSchedules = savedSchedules
+        .filter(schedule => {
+          const scheduleDate = safeParseISO(schedule.date);
+          return scheduleDate && !isBefore(scheduleDate, today);
+        })
+        .sort((a, b) => {
+          // 날짜로 정렬하되, 날짜가 같으면 시간으로 정렬
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return a.time.localeCompare(b.time);
+        })
+        .slice(0, 6); // 최대 6개만 표시
+        
+      // 구역 정보 추가
+      const savedTerritories = JSON.parse(localStorage.getItem('territories') || '[]');
+      setTerritories(savedTerritories);
+      
+      const upcomingWithTerritoryInfo = upcomingSchedules.map(schedule => {
+        if (schedule.territoryId) {
+          const territory = savedTerritories.find(t => t.id === schedule.territoryId);
+          if (territory) {
+            return {
+              ...schedule,
+              territoryNumber: territory.number,
+              territoryAddress: territory.address
+            };
+          }
+        }
+        return schedule;
+      });
+      
+      setSchedules(upcomingWithTerritoryInfo);
+      
+      // 요일별 반복 일정 분류
+      const weeklyData = Array(7).fill().map(() => []);
+      
+      savedSchedules.forEach(schedule => {
+        if (schedule.isRecurring) {
+          const scheduleDate = safeParseISO(schedule.date);
+          if (scheduleDate) {
+            const dayOfWeek = scheduleDate.getDay();
+            weeklyData[dayOfWeek].push(schedule);
+          }
+        }
+      });
+      
+      setWeeklySchedules(weeklyData);
+      
+      // 회관 청소 집단 불러오기
+      const savedCleaningGroups = JSON.parse(localStorage.getItem('cleaningGroups') || '[]');
+      if (savedCleaningGroups.length > 0) {
+        // 현재 날짜에 해당하는 청소 집단 찾기
+        const currentDate = new Date();
+        const currentGroup = savedCleaningGroups.find(group => {
+          const startDate = safeParseISO(group.startDate);
+          const endDate = safeParseISO(group.endDate);
+          return startDate && endDate && currentDate >= startDate && currentDate <= endDate;
+        });
+        
+        setCleaningGroup(currentGroup || null);
+      }
+      
+      // 공개자 정보 불러오기
+      const savedPublishers = JSON.parse(localStorage.getItem('publishers') || '[]');
+      setPublishers(savedPublishers);
     }
   }, []);
-  
-  // 오늘 날짜
-  const today = startOfDay(new Date());
-  
-  // 공지사항 정렬 (중요도 내림차순, 날짜 내림차순) 및 지난 공지사항 필터링
-  const sortedNotices = [...notices]
-    .filter(notice => {
-      // 공지사항은 당일까지 표시
-      const noticeDate = parseISO(notice.date);
-      return !isBefore(noticeDate, today);
-    })
-    .sort((a, b) => {
-      // 먼저 중요도로 정렬
-      const importanceOrder = { 'high': 0, 'medium': 1, 'low': 2 };
-      if (importanceOrder[a.importance] !== importanceOrder[b.importance]) {
-        return importanceOrder[a.importance] - importanceOrder[b.importance];
-      }
-      // 다음으로 날짜 내림차순 정렬
-      return new Date(b.date) - new Date(a.date);
-    });
-  
-  // 다가오는 일정 필터링 및 정렬 (날짜 오름차순)
-  const upcomingSchedules = schedules
-    .filter(schedule => {
-      // 지난 일정 제외
-      const scheduleDate = startOfDay(parseISO(schedule.date));
-      return !isBefore(scheduleDate, today);
-    })
-    .sort((a, b) => parseISO(a.date) - parseISO(b.date));
-  
-  // 봉사 신청 핸들러
-  const handleApply = (name) => {
-    if (selectedSchedule) {
-      const updatedSchedules = schedules.map(schedule =>
-        schedule.id === selectedSchedule.id
-          ? {
-              ...schedule,
-              participants: [...schedule.participants, name]
-            }
-          : schedule
-      );
-      
-      // 로컬 스토리지에 저장
-      localStorage.setItem('schedules', JSON.stringify(updatedSchedules));
-      setSchedules(updatedSchedules);
-      
-      // 선택된 일정 업데이트
-      const updatedSchedule = updatedSchedules.find(s => s.id === selectedSchedule.id);
-      setSelectedSchedule(updatedSchedule);
-    }
-  };
-  
+
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      {/* 상단 배너 */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
-        <h1 className="font-bold text-xl sm:text-2xl mb-2">Congregación Viaducto Chino</h1>
-        <p>Gracias por su amor y esfuerzo</p>
-      </div>
-      
-      {/* 공지사항 섹션 */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-bold text-lg sm:text-xl">Anuncios</h2>
-          <Link href="/admin/notices" className="text-sm text-blue-600 hover:underline">
-            Ver más
-          </Link>
+    <Layout>
+      <div className="container mx-auto px-4 py-4">
+        {/* 사이트 이름과 환영 메시지 */}
+        <div className="bg-gradient-to-r from-sky-100 to-indigo-100 rounded-xl p-4 mb-6">
+          <h1 className="text-2xl font-bold text-sky-800 mb-2">Bienvenido a Tu Plataforma de Voluntariado</h1>
+          <p className="text-sky-700">Organiza, gestiona y participa en actividades de servicio voluntario</p>
         </div>
         
-        {sortedNotices.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sortedNotices.slice(0, 4).map(notice => (
-              <NoticeCard
-                key={notice.id}
+        {/* 메인 통계 섹션 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-sky-100 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center mb-1">
+              <span className="text-lg mr-2">🗺️</span>
+              <h2 className="text-sky-800 font-medium">Territorios</h2>
+            </div>
+            <div className="text-2xl font-bold text-sky-900">{territories.length}</div>
+          </div>
+          
+          <div className="bg-green-100 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center mb-1">
+              <span className="text-lg mr-2">👨‍👩‍👧‍👦</span>
+              <h2 className="text-green-800 font-medium">Publicadores</h2>
+            </div>
+            <div className="text-2xl font-bold text-green-900">{publishers.length}</div>
+          </div>
+          
+          <div className="bg-purple-100 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center mb-1">
+              <span className="text-lg mr-2">📢</span>
+              <h2 className="text-purple-800 font-medium">Anuncios</h2>
+            </div>
+            <div className="text-2xl font-bold text-purple-900">{notices.length}</div>
+          </div>
+          
+          <div className="bg-yellow-100 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center mb-1">
+              <span className="text-lg mr-2">🛒</span>
+              <h2 className="text-yellow-800 font-medium">Servicios</h2>
+            </div>
+            <div className="text-2xl font-bold text-yellow-900">{schedules.length}</div>
+          </div>
+        </div>
+        
+        {/* 최근 등록된 공지 */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-bold">Anuncios Recientes</h2>
+            <Link href="/notice" className="text-xs text-sky-600">Ver todos →</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {notices.map((notice) => (
+              <NoticeCard 
+                key={notice.id} 
                 notice={notice}
                 onClick={() => setSelectedNotice(notice)}
               />
             ))}
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
-            <p>No hay anuncios para mostrar.</p>
-          </div>
-        )}
-      </div>
-      
-      {/* 다가오는 봉사 일정 섹션 */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-bold text-lg sm:text-xl">Próximos Horarios de Servicio</h2>
-          <Link 
-            href="/volunteer"
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Ver más horarios
-          </Link>
         </div>
         
-        {upcomingSchedules.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {upcomingSchedules.slice(0, 6).map(schedule => (
+        {/* 다가오는 봉사 일정 */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-bold">Próximos Servicios</h2>
+            <Link href="/service" className="text-xs text-sky-600">Ver todos →</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {schedules.map((schedule) => (
               <ScheduleCard
                 key={schedule.id}
                 schedule={schedule}
@@ -363,28 +507,49 @@ export default function HomePage() {
               />
             ))}
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
-            <p>No hay horarios de servicio para mostrar.</p>
+        </div>
+        
+        {/* 요일별 정기 봉사 */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-bold">Servicios Semanales</h2>
+            <Link href="/service/weekly" className="text-xs text-sky-600">Ver todos →</Link>
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+              <WeeklyServiceCard 
+                key={day} 
+                day={day} 
+                services={weeklySchedules[day]}
+              />
+            ))}
+          </div>
+        </div>
+        
+        {/* 회관 청소 그룹 정보 */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-bold">Limpieza de Salón</h2>
+            <Link href="/cleaning" className="text-xs text-sky-600">Ver histórico →</Link>
+          </div>
+          <CleaningGroupCard group={cleaningGroup} />
+        </div>
+        
+        {/* 모달 컴포넌트 */}
+        {selectedNotice && (
+          <NoticeDetailModal 
+            notice={selectedNotice}
+            onClose={() => setSelectedNotice(null)}
+          />
+        )}
+        
+        {selectedSchedule && (
+          <ScheduleModal 
+            schedule={selectedSchedule} 
+            onClose={() => setSelectedSchedule(null)}
+          />
         )}
       </div>
-      
-      {/* 모달 */}
-      {selectedNotice && (
-        <NoticeModal
-          notice={selectedNotice}
-          onClose={() => setSelectedNotice(null)}
-        />
-      )}
-      
-      {selectedSchedule && (
-        <ScheduleModal
-          schedule={selectedSchedule}
-          onClose={() => setSelectedSchedule(null)}
-          onApply={handleApply}
-        />
-      )}
-    </div>
+    </Layout>
   );
-} 
+}; 
