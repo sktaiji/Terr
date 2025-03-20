@@ -4,6 +4,16 @@ import { format, parseISO, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Link from 'next/link';
 import Layout from '../components/Layout';
+import dynamic from 'next/dynamic';
+
+// 별도 컴포넌트 사용
+import TerritoryCard from '../../components/TerritoryCard';
+
+// 동적 임포트로 큰 컴포넌트 지연 로딩
+const MapComponent = dynamic(
+  () => import('../../components/MapComponent'),
+  { ssr: false, loading: () => <div className="p-4 bg-gray-100 rounded-lg">지도 로딩 중...</div> }
+);
 
 // 날짜 관련 유틸리티 함수들 - 단순화
 // 기존 isValidDateString 함수 삭제
@@ -193,189 +203,6 @@ const TerritoryStatusSummary = ({ territories }) => {
         <div>
           <div className="text-2xl font-bold text-sky-700">{completed}</div>
           <div className="text-xs text-gray-500">Completados</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Territory card component - admin/territory 페이지와 유사하게 수정
-const TerritoryCard = ({ territory, onClick, onChangeStatus }) => {
-  // 상태 변경 핸들러
-  const handleStatusChange = (newStatus, e) => {
-    e.stopPropagation(); // 이벤트 버블링 방지
-    
-    if (onChangeStatus && typeof onChangeStatus === 'function') {
-      try {
-        const now = new Date();
-        const dateStr = format(now, 'yyyy-MM-dd');
-        
-        const historyEntry = {
-          date: dateStr,
-          status: newStatus,
-          timestamp: now.getTime(),
-        };
-        
-        onChangeStatus(territory.id, newStatus, historyEntry);
-      } catch (error) {
-        console.error('상태 변경 오류:', error);
-      }
-    }
-  };
-  
-  // 완성된 구역은 흑백으로 표시
-  const isCompleted = territory.status === 'completed' || territory.status === 'completado';
-  
-  // URL에서 파일명 추출 - 안전하게 처리
-  const getFileName = () => {
-    // URL이 없는 경우
-    if (!territory || !territory.url) return '';
-    
-    try {
-      // 문자열이 아닌 경우 처리
-      if (typeof territory.url !== 'string') {
-        return 'PDF';
-      }
-      
-      let fileName = 'PDF';
-      
-      try {
-        // URL 객체 생성 시도
-        const url = new URL(territory.url);
-        
-        // 경로가 있는지 확인
-        if (url.pathname) {
-          // split 대신 lastIndexOf와 substring 사용
-          const lastSlashIndex = url.pathname.lastIndexOf('/');
-          if (lastSlashIndex !== -1 && lastSlashIndex < url.pathname.length - 1) {
-            fileName = url.pathname.substring(lastSlashIndex + 1);
-            
-            // URL 디코딩 시도
-            try {
-              fileName = decodeURIComponent(fileName);
-            } catch (e) {
-              // 디코딩 실패 시 원본 사용
-            }
-            
-            // 파일명이 비어있는 경우
-            if (!fileName) {
-              return 'PDF';
-            }
-            
-            // 파일명이 너무 길면 축약
-            if (fileName.length > 15) {
-              return fileName.substring(0, 12) + '...';
-            }
-          }
-        }
-      } catch (e) {
-        // URL 파싱 실패 시 단순 파일명 추출 시도
-        const urlStr = territory.url.toString();
-        const lastSlashIndex = urlStr.lastIndexOf('/');
-        
-        if (lastSlashIndex !== -1 && lastSlashIndex < urlStr.length - 1) {
-          fileName = urlStr.substring(lastSlashIndex + 1);
-          
-          // 파일명이 너무 길면 축약
-          if (fileName.length > 15) {
-            return fileName.substring(0, 12) + '...';
-          }
-        }
-      }
-      
-      return fileName;
-    } catch (e) {
-      console.error('파일명 추출 오류:', e);
-      return 'PDF';
-    }
-  };
-  
-  // 날짜 정보 가져오기 - 안전하게 처리
-  const lastWorkedDate = territory.lastWorkedDate ? safeFormatDate(territory.lastWorkedDate) : null;
-  
-  // 완성 날짜 계산 및 포맷팅
-  const completionDateValue = getCompletionDate(territory);
-  const formattedCompletionDate = completionDateValue ? safeFormatDate(completionDateValue) : null;
-  
-  return (
-    <div 
-      className={`bg-white rounded-lg shadow-sm p-3 border border-sky-50 flex flex-col justify-between cursor-pointer hover:shadow-md transition-shadow ${isCompleted ? 'grayscale' : ''}`}
-      onClick={() => onClick(territory)}
-    >
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center">
-            <span className="text-sm mr-1">🗺️</span>
-            <h3 className="font-medium text-sm">{territory.number}</h3>
-            {territory.url && (
-              <span className="ml-1 text-xs text-gray-500 truncate max-w-[120px]">- {getFileName()}</span>
-            )}
-          </div>
-          <TerritoryStatusBadge status={territory.status} />
-        </div>
-        
-        <div className="grid grid-cols-1 gap-1 text-sm mb-2">
-          {territory.description && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Descripción:</span>
-              <span className="font-medium truncate max-w-[60%] text-right">
-                {territory.description}
-              </span>
-            </div>
-          )}
-          {territory.address && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Dirección:</span>
-              <SafeLink 
-                href={`https://www.google.com/maps/search/?api=1&query=${safeEncodeURIComponent(territory.address)}`} 
-                className="text-sky-600 text-sm hover:underline truncate max-w-[60%] text-right"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {territory.address}
-              </SafeLink>
-            </div>
-          )}
-          {territory.assignedTo && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Publicador:</span>
-              <span className="font-medium truncate max-w-[60%] text-right">{territory.assignedTo}</span>
-            </div>
-          )}
-          {lastWorkedDate && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Trabajado:</span>
-              <span className="font-medium text-green-600">{lastWorkedDate}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <div className="mt-auto">
-        <div className="flex gap-1 mb-1">
-          <button
-            className={`flex-1 text-center py-1 px-1 text-sm font-medium rounded ${
-              territory.status === 'inicio' ? 'bg-sky-600 text-white' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-            }`}
-            onClick={(e) => handleStatusChange('inicio', e)}
-          >
-            Inicio
-          </button>
-          <button
-            className={`flex-1 text-center py-1 px-1 text-sm font-medium rounded ${
-              territory.status === 'proceso' ? 'bg-sky-600 text-white' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-            }`}
-            onClick={(e) => handleStatusChange('proceso', e)}
-          >
-            Proceso
-          </button>
-          <button
-            className={`flex-1 text-center py-1 px-1 text-sm font-medium rounded ${
-              territory.status === 'completado' ? 'bg-sky-600 text-white' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-            }`}
-            onClick={(e) => handleStatusChange('completado', e)}
-          >
-            Comp.
-          </button>
         </div>
       </div>
     </div>
@@ -963,293 +790,6 @@ const TerritoryProgress = ({ territories }) => {
   );
 };
 
-// Google Map component - 안전하게 수정
-const GoogleMap = ({ territories }) => {
-  const mapRef = useRef(null);
-  const [currentPosition, setCurrentPosition] = useState(null);
-  const [destination, setDestination] = useState(null);
-  const [directionsService, setDirectionsService] = useState(null);
-  const [directionsRenderer, setDirectionsRenderer] = useState(null);
-  const [searchValue, setSearchValue] = useState('');
-  
-  // 안전하게 주소 처리
-  const processAddress = (address) => {
-    if (!address || typeof address !== 'string') return '';
-    try {
-      return address.trim();
-    } catch (e) {
-      console.error('주소 처리 오류:', e);
-      return '';
-    }
-  };
-  
-  // Initialize map
-  useEffect(() => {
-    // Check if Google Maps API script is loaded
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-      
-      script.onload = initMap;
-      return () => {
-        document.head.removeChild(script);
-      };
-    } else {
-      initMap();
-    }
-  }, []);
-  
-  // Initialize map function - 안전하게 수정
-  const initMap = () => {
-    if (!mapRef.current || !window.google) return;
-    
-    try {
-      // Get current position
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            try {
-              const { latitude, longitude } = position.coords;
-              setCurrentPosition({ lat: latitude, lng: longitude });
-              
-              const map = new window.google.maps.Map(mapRef.current, {
-                center: { lat: latitude, lng: longitude },
-                zoom: 15,
-              });
-              
-              // Current position marker
-              new window.google.maps.Marker({
-                position: { lat: latitude, lng: longitude },
-                map,
-                title: 'Tu ubicación actual',
-                icon: {
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: '#4285F4',
-                  fillOpacity: 1,
-                  strokeColor: '#FFFFFF',
-                  strokeWeight: 2,
-                },
-              });
-              
-              // Add territory markers - 모든 작업을 try-catch로 감싸기
-              if (Array.isArray(territories)) {
-                territories.forEach((territory) => {
-                  try {
-                    const address = processAddress(territory.address);
-                    if (address) {
-                      const geocoder = new window.google.maps.Geocoder();
-                      geocoder.geocode({ address }, (results, status) => {
-                        try {
-                          if (status === 'OK' && results && results[0]) {
-                            const marker = new window.google.maps.Marker({
-                              position: results[0].geometry.location,
-                              map,
-                              title: `Territorio #${territory.number || ''}`,
-                              icon: {
-                                url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                              },
-                            });
-                            
-                            // Info window
-                            const infoWindow = new window.google.maps.InfoWindow({
-                              content: createInfoWindowContent(territory),
-                            });
-                            
-                            marker.addListener('click', () => {
-                              infoWindow.open(map, marker);
-                              
-                              // Route button event
-                              setTimeout(() => {
-                                try {
-                                  const routeBtn = document.getElementById(`route-btn-${territory.id}`);
-                                  if (routeBtn) {
-                                    routeBtn.addEventListener('click', () => {
-                                      try {
-                                        calculateRoute(
-                                          { lat: latitude, lng: longitude },
-                                          results[0].geometry.location
-                                        );
-                                      } catch (error) {
-                                        console.error('경로 계산 오류:', error);
-                                      }
-                                    });
-                                  }
-                                } catch (error) {
-                                  console.error('버튼 이벤트 오류:', error);
-                                }
-                              }, 200);
-                            });
-                          }
-                        } catch (error) {
-                          console.error('지오코딩 결과 처리 오류:', error);
-                        }
-                      });
-                    }
-                  } catch (error) {
-                    console.error('구역 마커 생성 오류:', error);
-                  }
-                });
-              }
-              
-              // Directions service initialization
-              try {
-                const directionsService = new window.google.maps.DirectionsService();
-                const directionsRenderer = new window.google.maps.DirectionsRenderer({
-                  map,
-                  suppressMarkers: false,
-                });
-                
-                setDirectionsService(directionsService);
-                setDirectionsRenderer(directionsRenderer);
-              } catch (error) {
-                console.error('방향 서비스 초기화 오류:', error);
-              }
-              
-              // Autocomplete settings
-              try {
-                const input = document.getElementById('pac-input');
-                if (input) {
-                  const autocomplete = new window.google.maps.places.Autocomplete(input);
-                  autocomplete.bindTo('bounds', map);
-                  
-                  autocomplete.addListener('place_changed', () => {
-                    try {
-                      const place = autocomplete.getPlace();
-                      
-                      if (!place.geometry || !place.geometry.location) {
-                        return;
-                      }
-                      
-                      if (place.geometry.viewport) {
-                        map.fitBounds(place.geometry.viewport);
-                      } else {
-                        map.setCenter(place.geometry.location);
-                        map.setZoom(17);
-                      }
-                      
-                      // Destination setting
-                      setDestination(place.geometry.location);
-                      
-                      // Marker creation
-                      new window.google.maps.Marker({
-                        position: place.geometry.location,
-                        map,
-                        title: place.name,
-                      });
-                    } catch (error) {
-                      console.error('장소 변경 이벤트 처리 오류:', error);
-                    }
-                  });
-                }
-              } catch (error) {
-                console.error('자동완성 설정 오류:', error);
-              }
-            } catch (error) {
-              console.error('지도 초기화 오류:', error);
-            }
-          },
-          (error) => {
-            console.error('Error obteniendo la ubicación:', error);
-            try {
-              // Default position (Mexico City)
-              const defaultPos = { lat: 19.4326, lng: -99.1332 };
-              setCurrentPosition(defaultPos);
-              
-              const map = new window.google.maps.Map(mapRef.current, {
-                center: defaultPos,
-                zoom: 12,
-              });
-            } catch (mapError) {
-              console.error('기본 지도 생성 오류:', mapError);
-            }
-          }
-        );
-      }
-    } catch (error) {
-      console.error('지도 초기화 전체 오류:', error);
-    }
-  };
-  
-  // Route calculation function - 안전하게 처리
-  const calculateRoute = (origin, destination) => {
-    if (!directionsService || !directionsRenderer) return;
-    
-    try {
-      directionsService.route(
-        {
-          origin,
-          destination,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (response, status) => {
-          try {
-            if (status === 'OK') {
-              directionsRenderer.setDirections(response);
-            } else {
-              console.error('경로 계산 실패:', status);
-            }
-          } catch (error) {
-            console.error('경로 콜백 처리 오류:', error);
-          }
-        }
-      );
-    } catch (error) {
-      console.error('경로 계산 오류:', error);
-    }
-  };
-  
-  // Search and route calculation
-  const handleRouteSearch = (e) => {
-    e.preventDefault();
-    
-    if (!currentPosition || !destination) return;
-    
-    try {
-      calculateRoute(currentPosition, destination);
-    } catch (error) {
-      console.error('경로 검색 핸들러 오류:', error);
-    }
-  };
-  
-  return (
-    <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-      <h3 className="text-lg font-medium mb-3 text-sky-700">Mapa de Territorios</h3>
-      
-      <div className="mb-4">
-        <form onSubmit={handleRouteSearch} className="flex gap-2">
-          <input
-            id="pac-input"
-            type="text"
-            placeholder="Buscar dirección o territorio..."
-            className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="bg-sky-500 text-white px-4 py-2 rounded-md hover:bg-sky-600 transition-colors"
-          >
-            Ruta
-          </button>
-        </form>
-      </div>
-      
-      <div 
-        ref={mapRef} 
-        className="w-full h-96 rounded-lg border border-gray-300"
-      ></div>
-      
-      <div className="mt-3 text-xs text-gray-500 text-center">
-        Haz clic en un marcador para ver la información del territorio y las opciones de ruta.
-      </div>
-    </div>
-  );
-};
-
 // Main page component
 export default function TerritoryPage() {
   const [territories, setTerritories] = useState([]);
@@ -1259,8 +799,8 @@ export default function TerritoryPage() {
   const [publishers, setPublishers] = useState([]);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [mapModalOpen, setMapModalOpen] = useState(false);
-  
+  const [mapVisible, setMapVisible] = useState(false); // 맵 표시 여부
+
   // Load data from localStorage
   useEffect(() => {
     // Load territory data
@@ -1298,7 +838,7 @@ export default function TerritoryPage() {
   // Territory selection handler
   const handleTerritoryClick = (territory) => {
     setSelectedTerritory(territory);
-    setMapModalOpen(true);
+    setMapVisible(true);
   };
   
   // Open assign modal
@@ -1497,6 +1037,24 @@ export default function TerritoryPage() {
     }
   };
   
+  // MapComponent 렌더링 조건부 처리
+  const renderMap = () => {
+    if (!mapVisible) {
+      return (
+        <div className="bg-white rounded-lg shadow p-8 text-center">
+          <button 
+            onClick={() => setMapVisible(true)}
+            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+          >
+            지도 표시
+          </button>
+        </div>
+      );
+    }
+    
+    return <MapComponent territories={territories} />;
+  };
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-4">
@@ -1556,10 +1114,10 @@ export default function TerritoryPage() {
         )}
         
         {/* Territory Modal */}
-        {mapModalOpen && selectedTerritory && (
+        {mapVisible && selectedTerritory && (
           <TerritoryModal 
             territory={selectedTerritory}
-            onClose={() => setMapModalOpen(false)}
+            onClose={() => setMapVisible(false)}
             onAssign={openAssignModal}
             onComplete={handleCompleteTerritory}
             onMakeAvailable={handleMakeAvailable}

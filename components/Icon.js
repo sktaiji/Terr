@@ -8,7 +8,7 @@ export default function Icon({ name, size = 24, className = "" }) {
       stroke="currentColor"
       aria-hidden="true"
     >
-      <use href={`/icons.svg#${name}`} />
+      <use href={`/icons.min.svg#${name}`} />
     </svg>
   );
 } 
